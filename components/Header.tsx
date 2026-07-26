@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import gsap from 'gsap';
-import { Volume2 } from 'lucide-react';
+import { Volume2, VolumeX } from 'lucide-react';
 
 // Pure Shadcn UI Component Imports
 import {
@@ -13,14 +13,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-
-const PAGE_DETAILS: Record<string, { title: string; desc: string }> = {
-  home: { title: "index portal", desc: "the central clearinghouse and landing baseline." },
-  now: { title: "current focus", desc: "what i am building, thinking, and learning right now." },
-  about: { title: "identity script", desc: "sixteen year old developer. background and core stacks." },
-  work: { title: "experience log", desc: "historical contract history, engineering, and roles." },
-  projects: { title: "production laboratory", desc: "open source repositories, experiments, and applications." },
-};
 
 const NAV_ITEMS = [
   { id: 'home', label: 'home', href: '/' },
@@ -33,18 +25,17 @@ const NAV_ITEMS = [
 const HeaderNavbar = () => {
   const pathname = usePathname();
   const router = useRouter();
-  const [navTime, setNavTime] = useState('13:14');
+  const [navTime, setNavTime] = useState('14:42');
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+  const [hoveredTab, setHoveredTab] = useState<string | null>(null);
   
   // Derive activeTab based on current URL path
   const currentTab = NAV_ITEMS.find(item => item.href === pathname)?.id || 'home';
+  const activeTarget = hoveredTab || currentTab;
   
-  const [hoveredTab, setHoveredTab] = useState<string | null>(null);
-  const [cardXOffset, setCardXOffset] = useState(0);
-  
-  const containerRef = useRef<HTMLDivElement>(null);
-  const bgPillRef = useRef<HTMLSpanElement>(null);
-  const infoCardRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+  const bgPillRef = useRef<HTMLLIElement>(null);
   const closeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
@@ -56,49 +47,35 @@ const HeaderNavbar = () => {
       );
     };
     updateHeaderClock();
-    const interval = setInterval(updateHeaderClock, 60000);
+    const interval = setInterval(updateHeaderClock, 10000);
     return () => clearInterval(interval);
   }, []);
 
-  const handleMouseEnter = (e: React.MouseEvent<HTMLAnchorElement>, item: string) => {
-    if (closeTimeoutRef.current) clearTimeout(closeTimeoutRef.current);
-    setHoveredTab(item);
-    const target = e.currentTarget;
+  // Smoothly move magnetic pill to hovered or currently active tab
+  useEffect(() => {
+    const updatePillPosition = () => {
+      const el = listRef.current?.querySelector(`[data-tab="${activeTarget}"]`) as HTMLElement;
+      if (el && bgPillRef.current) {
+        gsap.to(bgPillRef.current, {
+          left: el.offsetLeft,
+          width: el.offsetWidth,
+          opacity: 1,
+          duration: 0.25,
+          ease: "power2.out",
+          overwrite: "auto",
+        });
+      }
+    };
+
+    updatePillPosition();
     
-    gsap.to(bgPillRef.current, {
-      left: target.offsetLeft,
-      width: target.offsetWidth,
-      duration: 0.22,
-      ease: "power2.out",
-      opacity: 1
-    });
-
-    const targetCenter = target.offsetLeft + (target.offsetWidth / 2);
-    setCardXOffset(targetCenter);
-
-    gsap.killTweensOf(infoCardRef.current);
-    gsap.fromTo(infoCardRef.current,
-      { opacity: 0, y: 4, scale: 0.98 },
-      { opacity: 1, y: 0, scale: 1, duration: 0.2, ease: "power3.out" }
-    );
-  };
-
-  const handleMouseLeaveContainer = () => {
-    setHoveredTab(null);
-    const activeEl = containerRef.current?.querySelector(`[data-tab="${currentTab}"]`) as HTMLElement;
-    if (activeEl) {
-      gsap.to(bgPillRef.current, {
-        left: activeEl.offsetLeft,
-        width: activeEl.offsetWidth,
-        duration: 0.22,
-        ease: "power2.out"
-      });
-    }
-  };
+    // Ensure accurate position on window resize or layout shift
+    window.addEventListener('resize', updatePillPosition);
+    return () => window.removeEventListener('resize', updatePillPosition);
+  }, [activeTarget, pathname]);
 
   const handleMenuMouseEnter = () => {
     if (closeTimeoutRef.current) clearTimeout(closeTimeoutRef.current);
-    setHoveredTab(null);
     setDropdownOpen(true);
   };
 
@@ -113,146 +90,137 @@ const HeaderNavbar = () => {
     router.push(href);
   };
 
-  // Re-track active tab location whenever route path updates
-  useEffect(() => {
-    const activeEl = containerRef.current?.querySelector(`[data-tab="${currentTab}"]`) as HTMLElement;
-    if (activeEl) {
-      gsap.set(bgPillRef.current, {
-        left: activeEl.offsetLeft,
-        width: activeEl.offsetWidth,
-        opacity: 1
-      });
-    }
-  }, [currentTab, pathname]);
-
   return (
-    <header className="fixed top-3 sm:top-5 left-0 w-full z-50 flex flex-col items-center pointer-events-none px-3 sm:px-4 select-none">
+    <header className="fixed top-4 sm:top-6 left-0 w-full z-50 flex flex-col items-center pointer-events-none px-3 select-none font-mono">
       
       {/* MAIN PREMIUM CAPSULE CONTAINER */}
-      <div 
-        ref={containerRef}
-        onMouseLeave={handleMouseLeaveContainer}
-        className="pointer-events-auto relative flex items-center bg-[#0d0d0f]/95 sm:bg-[#0d0d0f]/90 border border-[#1f1f23] backdrop-blur-xl rounded-full h-[36px] sm:h-[38px] px-1 shadow-[0_24px_60px_rgba(0,0,0,0.8)] max-w-full transition-all duration-300"
+      <nav 
+        aria-label="primary navigation"
+        className="pointer-events-auto relative flex items-center h-10 sm:h-11 rounded-full border border-white/[0.08] bg-[#0e0e11]/85 backdrop-blur-2xl px-1.5 sm:px-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_8px_32px_rgba(0,0,0,0.6)] transition-all duration-300 max-w-[96vw] sm:max-w-full"
       >
-        {/* MAGNETIC BACKPLATE TRACKER PILL */}
-        <span 
-          ref={bgPillRef}
-          className="absolute top-[4px] bottom-[4px] bg-[#1a1a1e] border border-zinc-800/60 rounded-full z-0 pointer-events-none opacity-0 will-change-all hidden sm:block"
-        />
+        {/* NAVIGATION LINK MATRICES */}
+        <ul 
+          ref={listRef} 
+          onMouseLeave={() => setHoveredTab(null)}
+          className="flex items-center gap-0.5 sm:gap-1 relative z-10"
+        >
+          {/* MAGNETIC BACKPLATE TRACKER PILL (Moves dynamically to active/hovered tab) */}
+          <li 
+            ref={bgPillRef}
+            aria-hidden="true"
+            className="absolute top-[2px] bottom-[2px] bg-white/[0.08] border border-white/[0.05] rounded-full z-0 pointer-events-none opacity-0 shadow-sm"
+          />
 
-        {/* NAVIGATION LINK MATRICES (Now using Next.js client router links) */}
-        <nav className="flex items-center gap-0 sm:gap-0.5 relative z-10">
-          {NAV_ITEMS.map((item) => (
-            <Link
-              key={item.id}
-              href={item.href}
-              data-tab={item.id}
-              onMouseEnter={(e) => handleMouseEnter(e, item.id)}
-              className={`text-[11px] sm:text-[12px] h-[28px] sm:h-[30px] rounded-full transition-all duration-200 relative px-2.5 sm:px-3.5 flex items-center justify-center font-mono lowercase tracking-tight ${
-                currentTab === item.id 
-                  ? 'text-white font-medium bg-[#1a1a1e] sm:bg-transparent' 
-                  : 'text-zinc-500 hover:text-zinc-300'
-              }`}
-            >
-              {item.label}
-            </Link>
-          ))}
+          {NAV_ITEMS.map((item) => {
+            const isActive = currentTab === item.id;
+            const isSecondary = item.id === 'now' || item.id === 'projects';
+            return (
+              <li 
+                key={item.id} 
+                data-tab={item.id} 
+                onMouseEnter={() => setHoveredTab(item.id)}
+                className={`z-10 ${isSecondary ? 'hidden sm:block' : ''}`}
+              >
+                <Link
+                  href={item.href}
+                  className={`block rounded-full px-2 sm:px-3.5 py-1.5 text-[11px] sm:text-[13px] lowercase transition-colors duration-200 select-none ${
+                    isActive 
+                      ? 'text-[#f4f4f5] font-medium' 
+                      : 'text-[#8a8a8e] hover:text-[#f4f4f5]'
+                  }`}
+                >
+                  {item.label}
+                </Link>
+              </li>
+            );
+          })}
 
-          {/* SYSTEM OVERFLOW HOVER DROPDOWN CONTROLLER */}
-          <div 
-            className="relative flex items-center"
+          {/* MORE BUTTON DROPDOWN CONTROLLER (•••) */}
+          <li 
+            className="z-10 relative flex items-center"
             onMouseEnter={handleMenuMouseEnter}
             onMouseLeave={handleMenuMouseLeave}
           >
             <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
               <DropdownMenuTrigger 
-                className="w-6 sm:w-7 h-[28px] sm:h-[30px] text-[10px] rounded-full flex items-center justify-center text-zinc-500 hover:text-zinc-200 transition-colors tracking-widest outline-none cursor-pointer font-mono"
+                aria-label="more pages"
+                className="w-8 h-8 rounded-full flex items-center justify-center text-[#8a8a8e] hover:text-[#f4f4f5] hover:bg-white/[0.05] transition-colors outline-none cursor-pointer text-[13px] tracking-wider"
               >
                 •••
               </DropdownMenuTrigger>
 
               <DropdownMenuContent 
-                className="w-36 bg-[#0c0c0e]/95 border border-[#1f1f23] rounded-xl p-1 shadow-[0_15px_35px_rgba(0,0,0,0.85)] backdrop-blur-md flex flex-col gap-0.5 z-50 outline-none border-zinc-800 animate-in fade-in slide-in-from-top-1 duration-200"
+                className="w-36 bg-[#0e0e11]/95 border border-white/10 rounded-xl p-1 shadow-[0_15px_35px_rgba(0,0,0,0.85)] backdrop-blur-xl flex flex-col gap-0.5 z-50 outline-none font-mono animate-in fade-in slide-in-from-top-1 duration-200"
                 onMouseEnter={handleMenuMouseEnter}
                 onMouseLeave={handleMenuMouseLeave}
-                sideOffset={6}
+                sideOffset={8}
                 align="end"
               >
                 <DropdownMenuItem
-                  onClick={() => handleDropdownNavigate('/guestbook')}
-                  className="w-full text-left px-3 py-1.5 rounded-lg data-[highlighted]:bg-[#1a1a1e] transition-colors outline-none cursor-pointer flex justify-between items-center group"
+                  onClick={() => handleDropdownNavigate('/now')}
+                  className="sm:hidden w-full text-left px-3 py-1.5 rounded-lg data-[highlighted]:bg-white/[0.08] transition-colors outline-none cursor-pointer flex justify-between items-center group"
                 >
-                  <span className="flex-1 flex justify-between items-center">
-                    <span className="text-[11px] font-mono lowercase tracking-wide text-zinc-400 group-data-[highlighted]:!text-zinc-50">guestbook</span>
-                    <span className="text-[9px] font-mono text-zinc-600 group-data-[highlighted]:text-zinc-400">// 01</span>
-                  </span>
+                  <span className="text-[11px] lowercase tracking-wide text-[#8a8a8e] group-data-[highlighted]:text-[#f4f4f5]">now</span>
+                  <span className="text-[9px] text-zinc-600 group-data-[highlighted]:text-zinc-400">// nav</span>
+                </DropdownMenuItem>
+
+                <DropdownMenuItem
+                  onClick={() => handleDropdownNavigate('/projects')}
+                  className="sm:hidden w-full text-left px-3 py-1.5 rounded-lg data-[highlighted]:bg-white/[0.08] transition-colors outline-none cursor-pointer flex justify-between items-center group"
+                >
+                  <span className="text-[11px] lowercase tracking-wide text-[#8a8a8e] group-data-[highlighted]:text-[#f4f4f5]">projects</span>
+                  <span className="text-[9px] text-zinc-600 group-data-[highlighted]:text-zinc-400">// nav</span>
+                </DropdownMenuItem>
+
+                <DropdownMenuItem
+                  onClick={() => handleDropdownNavigate('/guestbook')}
+                  className="w-full text-left px-3 py-1.5 rounded-lg data-[highlighted]:bg-white/[0.08] transition-colors outline-none cursor-pointer flex justify-between items-center group"
+                >
+                  <span className="text-[11px] lowercase tracking-wide text-[#8a8a8e] group-data-[highlighted]:text-[#f4f4f5]">guestbook</span>
+                  <span className="text-[9px] text-zinc-600 group-data-[highlighted]:text-zinc-400">// 01</span>
                 </DropdownMenuItem>
 
                 <DropdownMenuItem
                   onClick={() => handleDropdownNavigate('/log')}
-                  className="w-full text-left px-3 py-1.5 rounded-lg data-[highlighted]:bg-[#1a1a1e] transition-colors outline-none cursor-pointer flex justify-between items-center group"
+                  className="w-full text-left px-3 py-1.5 rounded-lg data-[highlighted]:bg-white/[0.08] transition-colors outline-none cursor-pointer flex justify-between items-center group"
                 >
-                  <span className="flex-1 flex justify-between items-center">
-                    <span className="text-[11px] font-mono lowercase tracking-wide text-zinc-400 group-data-[highlighted]:!text-zinc-50">log</span>
-                    <span className="text-[9px] font-mono text-zinc-600 group-data-[highlighted]:text-zinc-400">// 02</span>
-                  </span>
+                  <span className="text-[11px] lowercase tracking-wide text-[#8a8a8e] group-data-[highlighted]:text-[#f4f4f5]">log</span>
+                  <span className="text-[9px] text-zinc-600 group-data-[highlighted]:text-zinc-400">// 02</span>
                 </DropdownMenuItem>
 
                 <DropdownMenuItem
                   onClick={() => handleDropdownNavigate('/stats')}
-                  className="w-full text-left px-3 py-1.5 rounded-lg data-[highlighted]:bg-[#1a1a1e] transition-colors outline-none cursor-pointer flex justify-between items-center group"
+                  className="w-full text-left px-3 py-1.5 rounded-lg data-[highlighted]:bg-white/[0.08] transition-colors outline-none cursor-pointer flex justify-between items-center group"
                 >
-                  <span className="flex-1 flex justify-between items-center">
-                    <span className="text-[11px] font-mono lowercase tracking-wide text-zinc-400 group-data-[highlighted]:!text-zinc-50">stats</span>
-                    <span className="text-[9px] font-mono text-zinc-600 group-data-[highlighted]:text-zinc-400">// 03</span>
-                  </span>
+                  <span className="text-[11px] lowercase tracking-wide text-[#8a8a8e] group-data-[highlighted]:text-[#f4f4f5]">stats</span>
+                  <span className="text-[9px] text-zinc-600 group-data-[highlighted]:text-zinc-400">// 03</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-          </div>
-        </nav>
+          </li>
+        </ul>
 
-        {/* SEPARATOR LAYER */}
-        <div className="w-[1px] h-3 sm:h-3.5 bg-zinc-800/80 mx-1.5 sm:mx-2 relative z-10" />
+        {/* VERTICAL SEPARATOR LINE */}
+        <span aria-hidden="true" className="mx-1 sm:mx-3 h-4 w-px bg-white/[0.1] relative z-10 shrink-0" />
 
-        {/* LIVE METADATA CONTAINER */}
-        <div className="flex items-center gap-1.5 sm:gap-2.5 pr-2 sm:pr-3 pl-0.5 text-[11px] font-mono tracking-tight text-zinc-500 relative z-10">
-          <div className="flex items-center gap-1 sm:gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#ef5350] shadow-[0_0_8px_rgba(239,83,80,0.5)] animate-pulse" />
-            <span className="lowercase font-medium text-zinc-400 hidden xs:inline-block">busy</span>
-          </div>
-
-          <span className="text-zinc-800 text-[8px] hidden xs:inline-block">•</span>
-          <span className="text-zinc-400 normal-case tracking-normal">{navTime}</span>
-          
-          <div className="text-zinc-500 hover:text-zinc-300 cursor-pointer transition-colors pt-0.5 hidden sm:block">
-            <Volume2 className="w-3 h-3" />
-          </div>
+        {/* STATUS INDICATOR & TABULAR CLOCK (🔴 busy · 14:42) */}
+        <div className="flex items-center gap-1 sm:gap-2 text-[11px] sm:text-[13px] text-[#8a8a8e] relative z-10 pr-1 shrink-0">
+          <span className="w-2 h-2 rounded-full bg-[#ef5350] shadow-[0_0_8px_rgba(239,83,80,0.6)] animate-pulse shrink-0" />
+          <span className="lowercase font-normal hidden sm:inline">busy</span>
+          <span className="text-[#8a8a8e]/40 select-none hidden sm:inline">·</span>
+          <span className="tabular-nums text-[#8a8a8e] pr-0.5">{navTime}</span>
         </div>
-      </div>
 
-      {/* DYNAMIC INFORMATION HOVER EXPANSION CARD */}
-      <div className="w-full max-w-2xl relative mt-2 pointer-events-none hidden sm:block">
-        {hoveredTab && (
-          <div 
-            ref={infoCardRef}
-            style={{ 
-              position: 'absolute',
-              left: `${cardXOffset}px`,
-              transform: 'translateX(-50%)',
-              willChange: 'left, transform'
-            }}
-            className="bg-[#0d0d0f]/95 border border-[#1f1f23] rounded-xl px-4 py-2.5 shadow-[0_20px_45px_rgba(0,0,0,0.7)] backdrop-blur-md w-64 flex flex-col gap-0.5 text-left transition-all duration-700"
-          >
-            <div className="text-[11px] font-mono text-zinc-200 font-semibold tracking-wide lowercase">
-              ~ {PAGE_DETAILS[hoveredTab]?.title}
-            </div>
-            <div className="text-[10px] font-mono text-zinc-500 lowercase leading-relaxed">
-              {PAGE_DETAILS[hoveredTab]?.desc}
-            </div>
-          </div>
-        )}
-      </div>
+        {/* UI SOUNDS TOGGLE BUTTON */}
+        <button 
+          type="button" 
+          onClick={() => setIsMuted(!isMuted)}
+          aria-label={isMuted ? "turn ui sounds on" : "turn ui sounds off"}
+          className="grid size-8 cursor-pointer place-items-center rounded-full text-[#8a8a8e] hover:bg-white/[0.05] hover:text-[#f4f4f5] transition-colors duration-200 active:scale-[0.92] relative z-10 shrink-0"
+        >
+          {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+        </button>
+      </nav>
       
     </header>
   );

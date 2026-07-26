@@ -2,7 +2,6 @@
 
 import React, { useEffect, useRef } from 'react';
 import gsap from 'gsap';
-import Lenis from 'lenis';
 import { RiArrowRightDownLine, RiCompass3Line } from 'react-icons/ri';
 import HeroBackground from '@/components/hero-background';
 
@@ -10,23 +9,7 @@ export default function AboutPage() {
   const containerRef = useRef<HTMLDivElement>(null);
   const elementsRef = useRef<HTMLDivElement>(null);
 
-  // 1. ULTRA-SMOOTH LENIS SCROLL LIFE CYCLE
-  useEffect(() => {
-    const lenis = new Lenis({
-      duration: 1.2,
-      easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
-      smoothWheel: true,
-    });
-
-    function raf(time: number) {
-      lenis.raf(time);
-      requestAnimationFrame(raf);
-    }
-    requestAnimationFrame(raf);
-    return () => lenis.destroy();
-  }, []);
-
-  // 2. LUXURY ENTRANCE MOTION SEQUENCING
+  // LUXURY ENTRANCE MOTION SEQUENCING
   useEffect(() => {
     const ctx = gsap.context(() => {
       gsap.fromTo('.reveal-title-char',
@@ -76,7 +59,7 @@ export default function AboutPage() {
 
         {/* HERO TITLE AREA - HIGHLY TUNED MOBILE FONT OVERLAPS */}
         <div className="relative w-full select-none">
-          <h1 className="text-[16vw] sm:text-[12vw] font-black tracking-[-0.06em] text-[#fafafa] lowercase leading-[0.78] font-sans antialiased flex flex-wrap gap-x-[0.03em]">
+          <h1 className="text-[13vw] sm:text-[12vw] md:text-[10vw] lg:text-[140px] font-black tracking-tighter sm:tracking-[-0.06em] text-[#fafafa] lowercase leading-[0.78] font-sans antialiased flex flex-wrap gap-x-[0.03em]">
             {"the".split("").map((char, i) => (
               <span key={`t-${i}`} className="reveal-title-char inline-block will-change-transform">{char}</span>
             ))}

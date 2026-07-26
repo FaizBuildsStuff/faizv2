@@ -2,28 +2,12 @@
 
 import React, { useEffect, useRef } from 'react';
 import gsap from 'gsap';
-import Lenis from 'lenis';
 import { RiFlaskLine, RiArrowRightDownLine } from 'react-icons/ri';
 import HeroBackground from '@/components/hero-background';
 
 export default function ProjectsPage() {
   const containerRef = useRef<HTMLDivElement>(null);
   const elementsRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const lenis = new Lenis({
-      duration: 1.1,
-      easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
-      smoothWheel: true,
-    });
-
-    function raf(time: number) {
-      lenis.raf(time);
-      requestAnimationFrame(raf);
-    }
-    requestAnimationFrame(raf);
-    return () => lenis.destroy();
-  }, []);
 
   useEffect(() => {
     const ctx = gsap.context(() => {

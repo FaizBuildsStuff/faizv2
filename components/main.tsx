@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import gsap from 'gsap';
+import DiscordProfile from '@/components/discord-profile';
 
 const MainFirstPage = () => {
   const [time, setTime] = useState({ hrs: '12', mins: '43', secs: '38' });
@@ -30,61 +31,60 @@ const MainFirstPage = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // Smooth mouse-reactive ambient lighting glow (UX Depth Element)
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!glowRef.current) return;
-      const { clientX, clientY } = e;
-      gsap.to(glowRef.current, {
-        x: clientX - 150,
-        y: clientY - 150,
-        duration: 2,
-        ease: "power2.out"
-      });
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    return () => window.removeEventListener('mousemove', handleMouseMove);
-  }, []);
-
-  // Premium GSAP Cinematic Entrance Sequence 
+  // GSAP 3D Asymmetrical Kinetic Entrance Choreography
   useEffect(() => {
     const ctx = gsap.context(() => {
-      const tl = gsap.timeline({ defaults: { ease: "power4.out" } });
+      
+      // 1. Ambient lighting glow gentle reveal
+      gsap.fromTo(glowRef.current, 
+        { opacity: 0, scale: 0.8 }, 
+        { opacity: 1, scale: 1, duration: 2.2, ease: "power2.out" }
+      );
 
-      gsap.set(titleTextRef.current, { y: 30, opacity: 0 });
-      gsap.set(dotRef.current, { scale: 0, opacity: 0 });
-      gsap.set([taglineRef.current, rightSidebarRef.current, footerRef.current], { opacity: 0, y: 25 });
-      gsap.set(glowRef.current, { opacity: 0 });
+      // 2. Main title explosive scale & letter reveal
+      gsap.fromTo(titleTextRef.current,
+        { 
+          opacity: 0, 
+          y: 60, 
+          skewY: 3,
+          filter: "blur(12px)" 
+        },
+        { 
+          opacity: 1, 
+          y: 0, 
+          skewY: 0,
+          filter: "blur(0px)", 
+          duration: 1.15, 
+          ease: "power3.out",
+          delay: 0.1 
+        }
+      );
 
-      tl.to(glowRef.current, {
-        opacity: 0.45,
-        duration: 2,
-        ease: "power2.out"
-      })
-      .to(titleTextRef.current, {
-        y: 0,
-        opacity: 1,
-        duration: 1.4,
-        letterSpacing: "-0.04em"
-      }, "-=1.4")
-      .to(dotRef.current, {
-        scale: 1,
-        opacity: 1,
-        duration: 0.9,
-        ease: "elastic.out(1.2, 0.6)"
-      }, "-=0.6")
-      .to([taglineRef.current, rightSidebarRef.current], {
-        opacity: 1,
-        y: 0,
-        duration: 1.2,
-        stagger: 0.15,
-      }, "-=0.7")
-      .to(footerRef.current, {
-        opacity: 1,
-        y: 0,
-        duration: 1,
-      }, "-=0.9");
+      // 3. Dot kinetic pulse arrival
+      gsap.fromTo(dotRef.current,
+        { scale: 0, opacity: 0 },
+        { scale: 1, opacity: 1, duration: 0.8, ease: "back.out(2.2)", delay: 0.85 }
+      );
+
+      // 4. Tagline clean slide-up
+      gsap.fromTo(taglineRef.current,
+        { opacity: 0, x: -15 },
+        { opacity: 1, x: 0, duration: 0.9, ease: "power2.out", delay: 0.6 }
+      );
+
+      // 5. Right sidebar metadata staggered dashboard reveal
+      gsap.fromTo(rightSidebarRef.current ? rightSidebarRef.current.children : [],
+        { opacity: 0, y: 25 },
+        { opacity: 1, y: 0, duration: 0.8, ease: "power2.out", stagger: 0.12, delay: 0.75 }
+      );
+
+      // 6. Footer bar rise
+      if (footerRef.current) {
+        gsap.fromTo(footerRef.current,
+          { opacity: 0, y: 15 },
+          { opacity: 1, y: 0, duration: 0.8, ease: "power2.out", delay: 1.1 }
+        );
+      }
 
     }, containerRef);
 
@@ -96,7 +96,8 @@ const MainFirstPage = () => {
       ref={containerRef}
       className="relative z-10 w-full min-h-screen bg-[#09090b] text-[#8a8a8e] select-none font-sans overflow-hidden flex flex-col justify-between p-6 sm:p-12 lg:p-16"
     >
-      {/* Dynamic Ambient Blur Canvas Element */}
+      
+      {/* Background Subtle Ambient Radial Lighting */}
       <div 
         ref={glowRef}
         className="absolute top-0 left-0 w-[300px] h-[300px] rounded-full bg-radial from-white/10 to-transparent blur-[80px] pointer-events-none z-0 mix-blend-screen hidden lg:block"
@@ -112,11 +113,11 @@ const MainFirstPage = () => {
         <div className="lg:col-span-9 flex flex-col justify-end items-start h-full pt-16 lg:pt-0">
           
           {/* Changed inline-block to w-fit so container wraps the text dimensions tightly */}
-          <div className="relative p-1 mb-3 sm:mb-4 group w-fit">
+          <div className="relative p-1 mb-3 sm:mb-4 group w-fit max-w-full">
             <div className="block">
               <h1 
                 ref={titleTextRef}
-                className="text-[14vw] sm:text-[12vw] lg:text-[170px] font-black tracking-[-0.04em] text-[#f4f4f5] leading-none select-text font-sans antialiased will-change-transform drop-shadow-[0_4px_12px_rgba(0,0,0,0.5)] pb-2"
+                className="text-[10vw] sm:text-[9.5vw] md:text-[8.5vw] lg:text-[140px] xl:text-[165px] font-black tracking-tighter sm:tracking-[-0.04em] text-[#f4f4f5] leading-none select-text font-sans antialiased will-change-transform drop-shadow-[0_4px_12px_rgba(0,0,0,0.5)] pb-2"
               >
                 cryptovoid.ex
               </h1>
@@ -125,7 +126,7 @@ const MainFirstPage = () => {
             {/* FIXED spacing parameters: dot is pinned right next to the letter 'x' cleanly */}
             <span 
               ref={dotRef}
-              className="absolute bottom-[16%] -right-2 sm:-right-3 lg:-right-4 w-[2.2vw] h-[2.2vw] min-w-[10px] min-h-[10px] max-w-[22px] max-h-[22px] rounded-full bg-[#ef5350] shadow-[0_0_35px_rgba(239,83,80,0.65)] will-change-transform transition-transform duration-500 group-hover:scale-110" 
+              className="absolute bottom-[16%] -right-2 sm:-right-3 lg:-right-4 w-[2vw] h-[2vw] min-w-[8px] min-h-[8px] max-w-[20px] max-h-[20px] rounded-full bg-[#ef5350] shadow-[0_0_35px_rgba(239,83,80,0.65)] will-change-transform transition-transform duration-500 group-hover:scale-110" 
             />
           </div>
           
@@ -143,8 +144,11 @@ const MainFirstPage = () => {
         {/* RIGHT FOCUS ZONE: Detached Floating Metadata Dashboard Module */}
         <div 
           ref={rightSidebarRef}
-          className="lg:col-span-3 flex flex-col items-start lg:items-end justify-end text-left lg:text-right gap-8 font-mono text-[10px] sm:text-[11px] tracking-widest text-[#3f3f46] mt-16 lg:mt-0 w-full pb-1 pl-1 lg:pl-0 will-change-transform"
+          className="lg:col-span-3 flex flex-col items-start lg:items-end justify-end text-left lg:text-right gap-6 font-mono text-[10px] sm:text-[11px] tracking-widest text-[#3f3f46] mt-12 sm:mt-16 lg:mt-0 w-full pb-1 pl-1 lg:pl-0 will-change-transform"
         >
+          {/* LIVE DISCORD LANYARD PROFILE WIDGET */}
+          <DiscordProfile userId="1071193261579976784" />
+
           {/* Glass Card Dynamic Clock UI Accent */}
           <div className="flex flex-col gap-1.5 w-full lg:w-auto items-start lg:items-end">
             <div className="flex items-baseline gap-0.5 select-text">

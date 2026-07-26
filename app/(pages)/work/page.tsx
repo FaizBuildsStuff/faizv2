@@ -2,7 +2,6 @@
 
 import React, { useEffect, useRef } from 'react';
 import gsap from 'gsap';
-import Lenis from 'lenis';
 import HeroBackground from '@/components/hero-background';
 
 const PROJECTS = [
@@ -18,21 +17,6 @@ const PROJECTS = [
 
 export default function WorkPage() {
   const containerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const lenis = new Lenis({
-      duration: 1.1,
-      easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
-      smoothWheel: true,
-    });
-
-    function raf(time: number) {
-      lenis.raf(time);
-      requestAnimationFrame(raf);
-    }
-    requestAnimationFrame(raf);
-    return () => lenis.destroy();
-  }, []);
 
   useEffect(() => {
     const ctx = gsap.context(() => {
@@ -88,7 +72,7 @@ export default function WorkPage() {
 
                 {/* PROJECT NAME: HERO TYPOGRAPHY */}
                 <div className="md:col-span-6 py-2 md:py-0">
-                  <h2 className="text-[14vw] sm:text-[10vw] md:text-[6vw] font-black tracking-[-0.05em] text-zinc-200 transition-all duration-500 leading-none lowercase ease-out group-hover:text-white group-hover:translate-x-1.5">
+                  <h2 className="text-[11vw] sm:text-[10vw] md:text-[6vw] font-black tracking-[-0.05em] text-zinc-200 transition-all duration-500 leading-none lowercase ease-out group-hover:text-white group-hover:translate-x-1.5">
                     {project.title}
                   </h2>
                 </div>

@@ -13,9 +13,28 @@ if (typeof window !== 'undefined') {
 export default function Footer() {
   const footerRef = useRef<HTMLDivElement>(null);
   const [time, setTime] = useState('');
+  const [liveVisitors, setLiveVisitors] = useState(1);
   const headingText = "see you around.";
 
-  // 1. LIVE TIME SYSTEM
+  // 1. LIVE TELEMETRY PRESENCE FETCHING
+  useEffect(() => {
+    const fetchPresence = async () => {
+      try {
+        const res = await fetch('/api/presence', { cache: 'no-store' });
+        if (res.ok) {
+          const data = await res.json();
+          setLiveVisitors(data.count || 1);
+        }
+      } catch (err) {
+        setLiveVisitors(1);
+      }
+    };
+    fetchPresence();
+    const interval = setInterval(fetchPresence, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // 2. LIVE TIME SYSTEM
   useEffect(() => {
     const updateTime = () => {
       const options: Intl.DateTimeFormatOptions = {
@@ -191,7 +210,10 @@ export default function Footer() {
           {/* LIVE CONCURRENT USERS */}
           <div className="footer-animate-col md:col-span-2 flex flex-col gap-1 md:items-end border-t border-zinc-900/60 md:border-none pt-4 md:pt-0">
             <span className="text-[11px] font-mono text-zinc-600 uppercase tracking-widest mb-2">// traffic</span>
-            <span className="text-zinc-300 font-mono">2 active</span>
+            <div className="flex items-center gap-1.5 font-mono text-zinc-300">
+              <span className="size-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.8)] shrink-0" />
+              <span>{liveVisitors} active</span>
+            </div>
             <span className="text-[12px] text-zinc-500 text-left md:text-right">viewers in room</span>
           </div>
 
