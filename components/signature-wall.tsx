@@ -11,6 +11,7 @@ import {
   Hand,
   RotateCcw,
   Compass,
+  Sparkles,
 } from "lucide-react";
 
 gsap.registerPlugin(ScrollTrigger, useGSAP);
@@ -75,6 +76,12 @@ function pointsToSmoothSvgPath(points: Point[]): string {
   return d;
 }
 
+function getStrokeCenter(d: string): Point | null {
+  const m = d.match(/M\s*(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)/);
+  if (!m) return null;
+  return { x: parseFloat(m[1]), y: parseFloat(m[2]) };
+}
+
 export default function SignatureWall() {
   const sectionRef = useRef<HTMLElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
@@ -84,10 +91,13 @@ export default function SignatureWall() {
   const [activeTool, setActiveTool] = useState<ToolMode>("fine");
   const [lastPen, setLastPen] = useState<PenType>("fine");
   const [activeColor, setActiveColor] = useState<string>("#171717");
+  const [isSaving, setIsSaving] = useState(false);
 
   // Panning state (world offset in px)
   const [pan, setPan] = useState<Point>({ x: 0, y: 0 });
+  const panRef = useRef<Point>({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
+  const isPanningRef = useRef(false);
   const [isSpaceDown, setIsSpaceDown] = useState(false);
   const panStartRef = useRef<{
     clientX: number;
@@ -96,33 +106,62 @@ export default function SignatureWall() {
     panY: number;
   } | null>(null);
 
-  // Drawing state
+  // Drawing state + synchronous refs so fast strokes never drop points
   const [currentPoints, setCurrentPoints] = useState<Point[]>([]);
+  const currentPointsRef = useRef<Point[]>([]);
   const [isDrawing, setIsDrawing] = useState(false);
+  const isDrawingRef = useRef(false);
+
+  const deletedIdsRef = useRef<Set<string>>(new Set());
+  const locateIndexRef = useRef<number>(0);
+
+  useEffect(() => {
+    panRef.current = pan;
+  }, [pan]);
+
+  const mergeServerStrokes = useCallback((incoming: SignatureStroke[]) => {
+    setStrokes((prev) => {
+      const map = new Map<string, SignatureStroke>();
+      for (const s of prev) {
+        if (!deletedIdsRef.current.has(s.id)) map.set(s.id, s);
+      }
+      for (const s of incoming) {
+        if (!deletedIdsRef.current.has(s.id)) map.set(s.id, s);
+      }
+      return Array.from(map.values()).sort(
+        (a, b) => a.createdAt - b.createdAt
+      );
+    });
+  }, []);
 
   const fetchSignatures = useCallback(async () => {
     try {
-      const res = await fetch("/api/signatures", { cache: "no-store" });
+      const res = await fetch(`/api/signatures?t=${Date.now()}`, {
+        cache: "no-store",
+        headers: { Pragma: "no-cache", "Cache-Control": "no-cache" },
+      });
       if (!res.ok) return;
       const data = (await res.json()) as { strokes?: SignatureStroke[] };
       if (!Array.isArray(data?.strokes)) return;
-
-      setStrokes((prev) => {
-        const map = new Map<string, SignatureStroke>();
-        for (const s of prev) map.set(s.id, s);
-        for (const s of data.strokes!) map.set(s.id, s);
-        return Array.from(map.values()).sort(
-          (a, b) => a.createdAt - b.createdAt
-        );
-      });
+      mergeServerStrokes(data.strokes);
     } catch {}
-  }, []);
+  }, [mergeServerStrokes]);
 
-  // Initial fetch + live polling every 4s so other users' signatures appear live
+  // Initial fetch + live polling every 2.5s + instant sync on tab focus
   useEffect(() => {
     fetchSignatures();
-    const interval = setInterval(fetchSignatures, 4000);
-    return () => clearInterval(interval);
+    const interval = setInterval(fetchSignatures, 2500);
+    const onFocus = () => fetchSignatures();
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") fetchSignatures();
+    };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
   }, [fetchSignatures]);
 
   // Spacebar shortcut to temporarily pan while drawing
@@ -183,10 +222,37 @@ export default function SignatureWall() {
     const localX = e.clientX - rect.left;
     const localY = e.clientY - rect.top;
     return {
-      x: localX - pan.x,
-      y: localY - pan.y,
+      x: localX - panRef.current.x,
+      y: localY - panRef.current.y,
     };
   };
+
+  const persistStrokeWithRetry = useCallback(
+    async (stroke: SignatureStroke) => {
+      setIsSaving(true);
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          const res = await fetch("/api/signatures", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ stroke }),
+            keepalive: true,
+          });
+          if (res.ok) {
+            const data = (await res.json()) as { strokes?: SignatureStroke[] };
+            if (Array.isArray(data?.strokes)) {
+              mergeServerStrokes(data.strokes);
+            }
+            setIsSaving(false);
+            return;
+          }
+        } catch {}
+        await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
+      }
+      setIsSaving(false);
+    },
+    [mergeServerStrokes]
+  );
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     const shouldPan =
@@ -195,15 +261,18 @@ export default function SignatureWall() {
       e.button === 1 ||
       e.button === 2;
 
-    e.currentTarget.setPointerCapture(e.pointerId);
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {}
 
     if (shouldPan) {
+      isPanningRef.current = true;
       setIsPanning(true);
       panStartRef.current = {
         clientX: e.clientX,
         clientY: e.clientY,
-        panX: pan.x,
-        panY: pan.y,
+        panX: panRef.current.x,
+        panY: panRef.current.y,
       };
       return;
     }
@@ -212,49 +281,63 @@ export default function SignatureWall() {
     const pt = getWorldPoint(e);
     if (!pt) return;
 
+    isDrawingRef.current = true;
+    currentPointsRef.current = [pt];
     setIsDrawing(true);
     setCurrentPoints([pt]);
   };
 
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (isPanning && panStartRef.current) {
+    if (isPanningRef.current && panStartRef.current) {
       const dx = e.clientX - panStartRef.current.clientX;
       const dy = e.clientY - panStartRef.current.clientY;
-      setPan(
-        clampPan(panStartRef.current.panX + dx, panStartRef.current.panY + dy)
+      const nextPan = clampPan(
+        panStartRef.current.panX + dx,
+        panStartRef.current.panY + dy
       );
+      panRef.current = nextPan;
+      setPan(nextPan);
       return;
     }
 
-    if (!isDrawing) return;
+    if (!isDrawingRef.current) return;
     const pt = getWorldPoint(e);
     if (!pt) return;
 
-    setCurrentPoints((prev) => {
-      if (prev.length === 0) return [pt];
+    const prev = currentPointsRef.current;
+    if (prev.length > 0) {
       const last = prev[prev.length - 1];
       const dist = Math.hypot(pt.x - last.x, pt.y - last.y);
-      if (dist < 1.8) return prev;
-      return [...prev, pt];
-    });
+      if (dist < 1.5) return;
+    }
+
+    const updated = [...prev, pt];
+    currentPointsRef.current = updated;
+    setCurrentPoints(updated);
   };
 
-  const handlePointerUp = () => {
-    if (isPanning) {
+  const finishStroke = () => {
+    if (isPanningRef.current) {
+      isPanningRef.current = false;
       setIsPanning(false);
       panStartRef.current = null;
       return;
     }
 
-    if (!isDrawing) return;
+    if (!isDrawingRef.current) return;
+    isDrawingRef.current = false;
     setIsDrawing(false);
 
-    if (currentPoints.length === 0) return;
+    const pts = currentPointsRef.current;
+    currentPointsRef.current = [];
+    setCurrentPoints([]);
+
+    if (pts.length === 0) return;
 
     const penType: PenType = activeTool === "pan" ? lastPen : activeTool;
     const penConfig =
       PEN_OPTIONS.find((p) => p.id === penType) || PEN_OPTIONS[0];
-    const d = pointsToSmoothSvgPath(currentPoints);
+    const d = pointsToSmoothSvgPath(pts);
 
     const newStroke: SignatureStroke = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -265,26 +348,55 @@ export default function SignatureWall() {
       createdAt: Date.now(),
     };
 
-    setCurrentPoints([]);
     setMyStrokeIds((prev) => [...prev, newStroke.id]);
     setStrokes((prev) => [...prev, newStroke]);
-
-    fetch("/api/signatures", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ stroke: newStroke }),
-    }).catch(() => {});
+    persistStrokeWithRetry(newStroke);
   };
 
   const handleUndoMyLastStroke = () => {
     if (myStrokeIds.length === 0) return;
     const lastId = myStrokeIds[myStrokeIds.length - 1];
+    deletedIdsRef.current.add(lastId);
     setMyStrokeIds((prev) => prev.slice(0, -1));
     setStrokes((prev) => prev.filter((s) => s.id !== lastId));
 
     fetch(`/api/signatures?id=${encodeURIComponent(lastId)}`, {
       method: "DELETE",
+      keepalive: true,
     }).catch(() => {});
+  };
+
+  const handleLocateLatestSignature = () => {
+    if (strokes.length === 0 || !stageRef.current) {
+      setPan({ x: 0, y: 0 });
+      return;
+    }
+    // Group strokes that are far apart into clusters so clicking Locate cycles through signatures across the wall
+    const clusters: Point[] = [];
+    for (let i = strokes.length - 1; i >= 0; i--) {
+      const pt = getStrokeCenter(strokes[i].d);
+      if (!pt) continue;
+      const existsNearby = clusters.some(
+        (c) => Math.hypot(c.x - pt.x, c.y - pt.y) < 180
+      );
+      if (!existsNearby) clusters.push(pt);
+    }
+
+    if (clusters.length === 0) {
+      setPan({ x: 0, y: 0 });
+      return;
+    }
+
+    const idx = locateIndexRef.current % clusters.length;
+    locateIndexRef.current = idx + 1;
+    const target = clusters[idx];
+    const rect = stageRef.current.getBoundingClientRect();
+    const desiredPan = clampPan(
+      rect.width / 2 - target.x,
+      rect.height / 2 - target.y
+    );
+    panRef.current = desiredPan;
+    setPan(desiredPan);
   };
 
   const selectPen = (pen: PenType) => {
@@ -309,9 +421,20 @@ export default function SignatureWall() {
           <h2 className="sig-wall-reveal text-foreground/40 font-mono text-xs sm:text-sm uppercase tracking-wide shrink-0">
             Sign the wall
           </h2>
-          <span className="sig-wall-reveal font-mono text-[11px] sm:text-xs text-neutral-400 truncate">
-            pan &amp; sign · saved forever
-          </span>
+          <div className="sig-wall-reveal flex items-center gap-1.5 font-mono text-[11px] sm:text-xs text-neutral-400 truncate">
+            <span
+              className={`size-1.5 rounded-full shrink-0 ${
+                isSaving
+                  ? "bg-amber-500 animate-pulse"
+                  : "bg-emerald-500"
+              }`}
+            />
+            <span className="truncate">
+              {isSaving
+                ? "saving signature..."
+                : `live · ${strokes.length} ${strokes.length === 1 ? "stroke" : "strokes"} · pan & sign`}
+            </span>
+          </div>
         </div>
 
         {/* BOUNDED MOVABLE SIGNATURE CANVAS CARD */}
@@ -322,8 +445,9 @@ export default function SignatureWall() {
             onContextMenu={(e) => e.preventDefault()}
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
-            onPointerUp={handlePointerUp}
-            onPointerCancel={handlePointerUp}
+            onPointerUp={finishStroke}
+            onPointerCancel={finishStroke}
+            onLostPointerCapture={finishStroke}
             className={`relative w-full h-[220px] sm:h-[280px] overflow-hidden rounded-[14px] border border-neutral-200/60 bg-[#FAFAF9]/70 touch-none ${
               isPanning
                 ? "cursor-grabbing"
@@ -338,18 +462,32 @@ export default function SignatureWall() {
               backgroundPosition: `${pan.x}px ${pan.y}px`,
             }}
           >
-            {/* Subtle Coordinate & Recenter Badge in Top-Right of Canvas */}
+            {/* Subtle Coordinate, Locate Signatures & Recenter Controls in Top-Right */}
             <div
               onPointerDown={(e) => e.stopPropagation()}
               className="absolute top-2.5 right-2.5 z-20 flex items-center gap-1.5"
             >
+              {strokes.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleLocateLatestSignature}
+                  title="Jump to signatures on the wall"
+                  className="inline-flex items-center gap-1 rounded-full border border-neutral-200/80 bg-white/90 px-2 py-0.5 font-mono text-[10px] text-neutral-600 hover:border-neutral-300 hover:text-black backdrop-blur-xs transition-colors cursor-pointer"
+                >
+                  <Sparkles className="size-2.5" />
+                  <span>Locate</span>
+                </button>
+              )}
               <span className="rounded-full border border-neutral-200/80 bg-white/90 px-2.5 py-0.5 font-mono text-[10px] text-neutral-500 backdrop-blur-xs tabular-nums">
                 {Math.round(-pan.x)}, {Math.round(-pan.y)}
               </span>
               {(pan.x !== 0 || pan.y !== 0) && (
                 <button
                   type="button"
-                  onClick={() => setPan({ x: 0, y: 0 })}
+                  onClick={() => {
+                    panRef.current = { x: 0, y: 0 };
+                    setPan({ x: 0, y: 0 });
+                  }}
                   className="inline-flex items-center gap-1 rounded-full border border-neutral-200/80 bg-white/90 px-2 py-0.5 font-mono text-[10px] text-neutral-700 hover:border-neutral-300 hover:text-black backdrop-blur-xs transition-colors cursor-pointer"
                 >
                   <Compass className="size-2.5" />
@@ -367,6 +505,30 @@ export default function SignatureWall() {
             )}
 
             <svg className="pointer-events-none h-full w-full overflow-visible">
+              <defs>
+                <filter
+                  id="wall-pencil-texture"
+                  filterUnits="userSpaceOnUse"
+                  x="-2000"
+                  y="-2000"
+                  width="5000"
+                  height="5000"
+                >
+                  <feTurbulence
+                    type="fractalNoise"
+                    baseFrequency="0.85"
+                    numOctaves="3"
+                    result="noise"
+                  />
+                  <feDisplacementMap
+                    in="SourceGraphic"
+                    in2="noise"
+                    scale="1.4"
+                    xChannelSelector="R"
+                    yChannelSelector="G"
+                  />
+                </filter>
+              </defs>
               <g transform={`translate(${pan.x}, ${pan.y})`}>
                 {/* Permanently saved strokes from Neon DB */}
                 {strokes.map((stroke) => (
@@ -381,7 +543,7 @@ export default function SignatureWall() {
                     opacity={stroke.pen === "marker" ? 0.82 : 0.95}
                     style={
                       stroke.pen === "pencil"
-                        ? { filter: "url(#pencil-texture)" }
+                        ? { filter: "url(#wall-pencil-texture)" }
                         : undefined
                     }
                   />
@@ -399,7 +561,7 @@ export default function SignatureWall() {
                     opacity={currentPenType === "marker" ? 0.82 : 0.95}
                     style={
                       currentPenType === "pencil"
-                        ? { filter: "url(#pencil-texture)" }
+                        ? { filter: "url(#wall-pencil-texture)" }
                         : undefined
                     }
                   />

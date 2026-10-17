@@ -36,37 +36,50 @@ async function ensureTable() {
   tableInitialized = true;
 }
 
+const NO_CACHE_HEADERS = {
+  "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0",
+  "CDN-Cache-Control": "no-store",
+  "Vercel-CDN-Cache-Control": "no-store",
+  Pragma: "no-cache",
+};
+
+async function queryAllStrokes(): Promise<SavedStroke[]> {
+  const sql = getSql();
+  const rows = await sql`
+    SELECT
+      id,
+      d,
+      color,
+      width,
+      pen,
+      created_at AS "createdAt"
+    FROM wall_signatures
+    ORDER BY created_at ASC
+    LIMIT 3000
+  `;
+
+  return rows.map((r) => ({
+    id: String(r.id),
+    d: String(r.d),
+    color: String(r.color),
+    width: Number(r.width),
+    pen:
+      r.pen === "marker" || r.pen === "pencil" ? r.pen : ("fine" as const),
+    createdAt: Number(r.createdAt),
+  }));
+}
+
 export async function GET() {
   try {
     await ensureTable();
-    const sql = getSql();
-    const rows = await sql`
-      SELECT
-        id,
-        d,
-        color,
-        width,
-        pen,
-        created_at AS "createdAt"
-      FROM wall_signatures
-      ORDER BY created_at ASC
-      LIMIT 3000
-    `;
-
-    const strokes: SavedStroke[] = rows.map((r) => ({
-      id: String(r.id),
-      d: String(r.d),
-      color: String(r.color),
-      width: Number(r.width),
-      pen:
-        r.pen === "marker" || r.pen === "pencil" ? r.pen : ("fine" as const),
-      createdAt: Number(r.createdAt),
-    }));
-
-    return Response.json({ strokes });
+    const strokes = await queryAllStrokes();
+    return Response.json({ strokes }, { headers: NO_CACHE_HEADERS });
   } catch (err) {
     console.error("GET /api/signatures error:", err);
-    return Response.json({ strokes: [] }, { status: 500 });
+    return Response.json(
+      { strokes: [] },
+      { status: 500, headers: NO_CACHE_HEADERS }
+    );
   }
 }
 
@@ -75,7 +88,10 @@ export async function POST(request: Request) {
     await ensureTable();
     const body = (await request.json()) as { stroke?: SavedStroke };
     if (!body?.stroke || typeof body.stroke.d !== "string") {
-      return Response.json({ error: "Invalid stroke" }, { status: 400 });
+      return Response.json(
+        { error: "Invalid stroke" },
+        { status: 400, headers: NO_CACHE_HEADERS }
+      );
     }
 
     const id = String(body.stroke.id || `${Date.now()}`);
@@ -95,13 +111,22 @@ export async function POST(request: Request) {
       ON CONFLICT (id) DO NOTHING
     `;
 
-    return Response.json({
-      ok: true,
-      stroke: { id, d, color, width, pen, createdAt },
-    });
+    const strokes = await queryAllStrokes();
+
+    return Response.json(
+      {
+        ok: true,
+        stroke: { id, d, color, width, pen, createdAt },
+        strokes,
+      },
+      { headers: NO_CACHE_HEADERS }
+    );
   } catch (err) {
     console.error("POST /api/signatures error:", err);
-    return Response.json({ error: "Failed to save stroke" }, { status: 500 });
+    return Response.json(
+      { error: "Failed to save stroke" },
+      { status: 500, headers: NO_CACHE_HEADERS }
+    );
   }
 }
 
@@ -111,15 +136,21 @@ export async function DELETE(request: Request) {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
     if (!id) {
-      return Response.json({ error: "Missing id" }, { status: 400 });
+      return Response.json(
+        { error: "Missing id" },
+        { status: 400, headers: NO_CACHE_HEADERS }
+      );
     }
 
     const sql = getSql();
     await sql`DELETE FROM wall_signatures WHERE id = ${id}`;
 
-    return Response.json({ ok: true });
+    return Response.json({ ok: true }, { headers: NO_CACHE_HEADERS });
   } catch (err) {
     console.error("DELETE /api/signatures error:", err);
-    return Response.json({ error: "Failed to delete stroke" }, { status: 500 });
+    return Response.json(
+      { error: "Failed to delete stroke" },
+      { status: 500, headers: NO_CACHE_HEADERS }
+    );
   }
 }
